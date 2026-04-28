@@ -1,6 +1,9 @@
 # Wildfire Evacuation Route & Risk Optimization
 
-A Machine Learning project designed to identify high-risk communities and optimize evacuation routes during wildfire events in Los Angeles County. The system produces an actionable, data-driven vulnerability assessment across all 2,493 LA County census tracts.
+A Machine Learning project designed to identify high-risk communities and optimize evacuation routes during wildfire events in Los Angeles County.
+The problems 
+
+The system produces an actionable, data-driven vulnerability assessment across all 2,493 LA County census tracts.
 
 ---
 
@@ -9,7 +12,6 @@ A Machine Learning project designed to identify high-risk communities and optimi
 ### Features
 
 **SVI Composite & Themes (from CDC)**
-- `rpl_themes` — overall social vulnerability percentile
 - `rpl_theme_1` — socioeconomic status
 - `rpl_theme_2` — household characteristics
 - `rpl_theme_3` — racial & ethnic minority status
@@ -31,13 +33,13 @@ A Machine Learning project designed to identify high-risk communities and optimi
 - **Validation:** 5-fold cross-validation, 80/20 train-test split
 - **Explainability:** SHAP feature importance
 
-### Evacuation Routing
+<!-- ### Evacuation Routing
 
 - **Graph:** OSMnx drivable network filtered to motorway → tertiary roads (26,716 nodes, 61,375 edges), projected to EPSG:3310
 - **Algorithm:** Dijkstra on `travel_time_s` edge weights
 - **Risk penalty:** 5× weight multiplier applied to edges in high-risk tracts
 
----
+--- -->
 
 ## Setup & Usage
 
@@ -59,7 +61,9 @@ Run notebooks in `notebooks/` in order:
 1. exploration.ipynb        — understand the data
 2. feature_engineering.ipynb — build features.geojson
 3. model_trainning.ipynb    — train model, save risk_classifier.pkl
-4. visualizations.ipynb     — generate maps in outputs/maps/
+4. implementation/visualizations.ipynb     — generate maps in outputs/maps/
+5. implementation/predict.py            — compare model to historic wildfire data wjtb generate maps in outputs/maps/
+6.  implementation/simulate_fire.py         — compare model to random spawn wildfire data wjtb generate maps in outputs/maps/
 ```
 
 ### 4. View outputs
