@@ -1,0 +1,201 @@
+
+# -----------------------------------------------------------
+# Project
+# -----------------------------------------------------------
+project:
+  name: wildfire-evacuation-route-risk-optimization
+  version: "1.0.0"
+  description: >
+    ML-driven vulnerability assessment and evacuation route optimization
+    for wildfire events across all LA County census tracts.
+  authors:
+    - Hung (Quan) Truong
+  output_dir: outputs/
+
+# -----------------------------------------------------------
+# Data Paths
+# -----------------------------------------------------------
+data:
+  raw_dir:      data/raw/
+  processed_dir: data/processed/
+  external_dir: data/external/
+  cache_dir:    data/cache/          # OSMnx tile/graph cache
+
+  # Raw inputs (local files)
+  california_svi:    data/raw/California_2020_SVI.csv          # CDC SVI 2020, CA statewide — filtered to LA County in notebook
+  la_census_tracts:  data/raw/LA_County_2020_Census_Tracts.geojson
+  la_county_boundary: data/raw/la_county.geojson               # neighborhood polygons used for basemap & spatial joins
+  fire_hydrants_dwp: data/raw/Fire_Hydrants_(DWP).geojson      # LA DWP hydrant locations
+  hospitals_raw:     data/raw/Hospitals_and_Medical_Centers.geojson
+
+  # Fire station data — fetched live from ArcGIS REST APIs (no local raw file)
+  # LACoFD:  https://services.arcgis.com/RmCCgQtiZLDCtblq/arcgis/rest/services/LACoFD_Fire_Station_Locations/FeatureServer/0/query
+  # LACoFD boundaries: https://services.arcgis.com/RmCCgQtiZLDCtblq/arcgis/rest/services/LACoFD_Fire_Station_Boundaries/FeatureServer/0/query
+  # LAFD:    https://services5.arcgis.com/7nsPwEMP38bSkCjy/arcgis/rest/services/LAFD_FireStations/FeatureServer/0/query
+  # LAFD boundaries: https://services5.arcgis.com/7nsPwEMP38bSkCjy/arcgis/rest/services/LAFD_FirstIn_Districts/FeatureServer/0/query
+  # All stations POI: https://services.arcgis.com/RmCCgQtiZLDCtblq/arcgis/rest/services/Points_of_Interest/FeatureServer/5/query
+
+  # Processed outputs
+  svi_tracts:               data/processed/svi_tracts.geojson              # census tracts with joined SVI attributes (2,493 tracts, 152 cols)
+  la_county_svi:            data/processed/la_county_svi.geojson           # neighborhood-level population-weighted SVI aggregation (272 neighborhoods)
+  all_stations:             data/processed/all_stations.geojson            # all fire stations serving LA County — 412 points, 6 cols
+  lafd_stations:            data/processed/lafd_stations.geojson           # LAFD only (106 stations)
+  lafd_boundaries:          data/processed/lafd_station_boundaries.geojson
+  lacofd_stations:          data/processed/LACoFD_stations.geojson         # LACoFD only (174 stations)
+  lacofd_boundaries:        data/processed/LACoFD_station_boundaries.geojson
+  hospitals:                data/processed/hospitals.geojson               # 165 hospitals (objectid, name, city, geometry)
+  fire_hydrants:            data/processed/Fire_Hydrants.geojson           # 60,295 DWP hydrant points (objectid, hydrantid, geometry)
+  escape_routes_roads_proc: data/processed/escape_routes_roads.geojson     # copy of external edges kept alongside processed layers
+
+  # External / derived
+  road_network_graph:  data/external/road_network.graphml           # OSMnx projected graph (EPSG:3310) — used for routing
+  escape_routes_roads: data/external/escape_routes_roads.geojson    # 61,375 drivable edges (motorway→tertiary) as GeoJSON
+
+# -----------------------------------------------------------
+# Coordinate Reference Systems
+# -----------------------------------------------------------
+crs:
+  geographic: "EPSG:4326"    # WGS 84 — all raw / saved GeoJSON files
+  projected:  "EPSG:3310"    # CA Albers Equal Area — used for all distance and area calculations
+  web_mercator: "EPSG:3857"  # Web Mercator — used when adding contextily basemaps
+
+# -----------------------------------------------------------
+# Spatial Processing
+# -----------------------------------------------------------
+spatial:
+  fire_station_buffer_m: 5000
+  hospital_buffer_m:     10000
+  hydrant_search_radius_m: 500
+
+  join_method: "nearest"         # "nearest" | "intersects" | "within"
+  max_join_distance_m: 1000
+
+# -----------------------------------------------------------
+# Feature Engineering
+# -----------------------------------------------------------
+features:
+  # SVI composite and theme percentile columns (snake_case after clean_columns)
+  svi_composite: rpl_themes       # overall SVI percentile (0 = least vulnerable, 1 = most)
+  svi_theme_cols:
+    - rpl_theme_1   # Socioeconomic status
+    - rpl_theme_2   # Household characteristics
+    - rpl_theme_3   # Racial & ethnic minority status
+    - rpl_theme_4   # Housing type & transportation
+
+  # SVI indicator percentage columns used to recompute RPL_THEMES when needed
+  svi_ep_theme1: [ep_pov_150, ep_unemp, ep_hburd, ep_nohsdp, ep_uninsur]
+  svi_ep_theme2: [ep_age_65, ep_age_17, ep_disabl, ep_sngpnt]
+  svi_ep_theme3: [ep_minrty]
+  svi_ep_theme4: [ep_limeng, ep_munit, ep_mobile, ep_crowd, ep_noveh, ep_groupq]
+
+  # Engineered spatial features (column names produced by feature_engineering.ipynb)
+  derived:
+    - dist_fire_station_m    # distance (m) from tract centroid to nearest fire station
+    - dist_hospital_m        # distance (m) from tract centroid to nearest hospital
+    - hydrant_count          # number of DWP hydrants within tract polygon
+    - tract_area_km2         # tract area in km²
+    - hydrant_density        # hydrant_count / tract_area_km2
+    - road_length_m          # total drivable road length clipped to tract (m)
+    - road_density           # road_length_m / tract_area_km2
+
+  svi_missing_sentinel: -999   # CDC SVI encodes missing values as -999; replace with NaN on load
+
+# -----------------------------------------------------------
+# Road Network (OSMnx download settings)
+# -----------------------------------------------------------
+road_network:
+  network_type: "drive"
+  osm_highway_filter: '["highway"~"motorway|trunk|primary|secondary|tertiary"]'
+  # Edge count by type in current download (26,716 nodes, 61,375 edges):
+  #   tertiary: 19,550 | secondary: 16,761 | primary: 14,102
+  #   motorway_link: 3,678 | motorway: 3,133 | primary_link: 1,521
+  #   trunk: 993 | secondary_link: 974 | tertiary_link: 438 | trunk_link: 225
+
+# -----------------------------------------------------------
+# Risk Classifier
+# -----------------------------------------------------------
+risk_classifier:
+  model_type: "random_forest"   # "random_forest" | "gradient_boosting" | "xgboost"
+  target_column: "risk_label"
+  test_size: 0.2
+  random_state: 42
+  cv_folds: 5
+
+  hyperparameters:
+    n_estimators: 200
+    max_depth: 10
+    min_samples_split: 5
+    min_samples_leaf: 2
+    class_weight: "balanced"
+
+  risk_thresholds:
+    low:      [0.0,  0.33]
+    moderate: [0.33, 0.66]
+    high:     [0.66, 1.0]
+
+  output_model:  outputs/models/risk_classifier.pkl
+  output_report: outputs/reports/risk_classifier_report.json
+
+# -----------------------------------------------------------
+# Evacuation Router
+# -----------------------------------------------------------
+evacuation_router:
+  graph_path: data/external/road_network.graphml
+  algorithm: "dijkstra"           # "dijkstra" | "astar" | "bidirectional"
+  weight_attribute: "travel_time_s"
+  max_routes_per_tract: 3
+  avoid_high_risk_roads: true
+  road_risk_penalty: 5.0          # edge weight multiplier for high-risk segments
+
+  # Free-flow speeds (km/h) matched to OSM highway types present in the network
+  speed_kmh:
+    motorway:       100
+    motorway_link:   60
+    trunk:           80
+    trunk_link:      50
+    primary:         60
+    primary_link:    40
+    secondary:       50
+    secondary_link:  40
+    tertiary:        40
+    tertiary_link:   30
+    default:         40
+
+  output_routes: outputs/maps/evacuation_routes.geojson
+
+# -----------------------------------------------------------
+# Visualisation / Dashboard
+# -----------------------------------------------------------
+gui:
+  title: "LA County Wildfire Evacuation Risk Dashboard"
+  host: "127.0.0.1"
+  port: 8050
+  debug: false
+  map_center: [34.0522, -118.2437]   # Los Angeles city centre
+  map_zoom: 10
+  tile_layer: "CartoDB.Positron"
+
+  color_scales:
+    risk:          "RdYlGn_r"
+    vulnerability: "OrRd"
+    routes:        "Blues"
+
+# -----------------------------------------------------------
+# Outputs
+# -----------------------------------------------------------
+outputs:
+  maps_dir:    outputs/maps/
+  models_dir:  outputs/models/
+  reports_dir: outputs/reports/
+
+  save_intermediate: true
+  map_format:    "html"    # "html" | "png" | "pdf"
+  report_format: "json"
+
+# -----------------------------------------------------------
+# Logging
+# -----------------------------------------------------------
+logging:
+  level: "INFO"                   # DEBUG | INFO | WARNING | ERROR
+  log_file: outputs/reports/run.log
+  format: "%(asctime)s  %(levelname)-8s  %(name)s — %(message)s"
