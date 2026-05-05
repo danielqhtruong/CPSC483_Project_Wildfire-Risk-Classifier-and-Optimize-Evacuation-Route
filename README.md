@@ -3,7 +3,7 @@
 A Machine Learning project designed to identify high-risk communities and optimize evacuation routes during wildfire events in Los Angeles County.
 The problems divide in 3 sub-problems 
 1. Risk Classifier for Vulnerable Neighborhoods
-2. Traffic Congestion
+2. Traffic Congestion Prediction 
 3. Route Optimization
 
 The system produces an actionable, data-driven vulnerability assessment across all 2,493 LA County census tracts.
