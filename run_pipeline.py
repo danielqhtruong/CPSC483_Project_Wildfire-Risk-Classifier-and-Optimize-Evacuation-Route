@@ -95,6 +95,9 @@ def main():
 
     print("\nWildfire Risk Classifier — Pipeline Runner")
 
+    (ROOT / "data" / "processed").mkdir(parents=True, exist_ok=True)
+    (ROOT / "data" / "cache").mkdir(parents=True, exist_ok=True)
+
     if not args.skip_install:
         install_requirements()
 
