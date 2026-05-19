@@ -10,7 +10,7 @@ This project addresses that gap through supervised machine learning. Given socio
 
 A Machine Learning project designed to identify high-risk communities and optimize evacuation routes during wildfire events in Los Angeles County.
 The problems divide in 3 sub-problems 
-1. Risk Classifier for Vulnerable Neighborhoods
+1. Risk Classifier for Vulnerable Neighborhoods (this project)
 2. Traffic Congestion
 3. Route Optimization
 
